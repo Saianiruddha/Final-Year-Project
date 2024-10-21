@@ -1,0 +1,172 @@
+import qrcode
+import mysql.connector
+import os
+from tkinter import *
+from PIL import Image, ImageTk
+
+
+class Generator:
+    def __init__(self, root):
+        self.root = root
+        self.root.geometry("1930x1080")
+        self.root.title("QR Code Generator")
+
+        title = Label(self.root, text="QR Code Generator", font=("times new roman", 40), fg="white", bg='#053246')
+        title.place(x=0, y=0, relwidth=1)
+
+        qr_frame = Frame(self.root, relief=RIDGE, bg="white", border=5)
+        qr_frame.place(x=60, y=90, width=700, height=650)
+
+        qr_frame_title = Label(qr_frame, text="Product Details", bg='#053246', font=("times new roman", 30), fg="white")
+        qr_frame_title.place(x=0, y=0, relwidth=1)
+
+        # ---------variables-----------
+        self.Id = StringVar()
+        self.Cost = StringVar()
+        self.Units = StringVar()
+        self.Expiry = StringVar()
+        self.msg = ""
+        self.products = []  # To store all products
+
+        # -----------details------------
+        lbl_prod_id = Label(qr_frame, text="Product ID", font=("times new roman", 20, 'bold'), fg="black", bg="white")
+        lbl_prod_id.place(x=50, y=100, width=200)
+        self.txt_prod_id = Entry(qr_frame, font=("times new roman", 20), bg="yellow", fg="black", textvariable=self.Id)
+        self.txt_prod_id.place(x=300, y=100, width=300)
+
+        lbl_cost = Label(qr_frame, text="Product Cost", font=("times new roman", 20, 'bold'), fg="black", bg="white")
+        lbl_cost.place(x=50, y=200, width=200)
+        self.txt_cost = Entry(qr_frame, font=("times new roman", 20), bg="yellow", fg="black", textvariable=self.Cost)
+        self.txt_cost.place(x=300, y=200, width=300)
+
+        lbl_units = Label(qr_frame, text="Units", font=("times new roman", 20, 'bold'), fg="black", bg="white")
+        lbl_units.place(x=50, y=300, width=200)
+        self.txt_units = Entry(qr_frame, font=("times new roman", 20), bg="yellow", fg="black", textvariable=self.Units)
+        self.txt_units.place(x=300, y=300, width=300)
+
+        lbl_expiry = Label(qr_frame, text="Expiry Month", font=("times new roman", 20, 'bold'), fg="black", bg="white")
+        lbl_expiry.place(x=50, y=400, width=200)
+        self.txt_expiry = Entry(qr_frame, font=("times new roman", 20), bg="yellow", fg="black",
+                                textvariable=self.Expiry)
+        self.txt_expiry.place(x=300, y=400, width=300)
+
+        # Button frame for organizing buttons in a row
+        button_frame = Frame(qr_frame, bg="white")
+        button_frame.place(x=50, y=500, width=600, height=100)
+
+        # Organizing buttons in the button_frame
+        add_product = Button(button_frame, text="Add Product", command=self.add_product,
+                             font=("times new roman", 18, 'bold'),
+                             fg="white", bg='#123456')
+        add_product.grid(row=0, column=0, padx=10, pady=20)
+
+        generate_qr = Button(button_frame, text="Generate QR Code", command=self.generate_qr,
+                             font=("times new roman", 18, 'bold'),
+                             fg="white", bg='#123456')
+        generate_qr.grid(row=0, column=1, padx=10, pady=20)
+
+        clear = Button(button_frame, text="Clear", command=self.clear, font=("times new roman", 18, 'bold'), fg="white",
+                       bg='#123456')
+        clear.grid(row=0, column=2, padx=10, pady=20)
+
+        self.message_ = Label(qr_frame, text=self.msg, font=("times new roman", 25, 'bold'), fg="green", bg="white")
+        self.message_.place(x=0, y=580, relwidth=1)
+
+        qr_code = Frame(self.root, relief=RIDGE, bg="white", border=5)
+        qr_code.place(x=860, y=90, width=600, height=650)
+
+        lbl_right_title = Label(qr_code, text="Product QR Code", bg='#053246', font=("times new roman", 30), fg="white")
+        lbl_right_title.place(x=0, y=0, relwidth=1)
+
+        self.qr_img = Label(qr_code, text="Not Available", font=("times new roman", 18), bg="black", fg="white")
+        self.qr_img.place(x=100, y=100, width=400, height=400)
+
+    # Add product to the list
+    def add_product(self):
+        if self.Id.get() == '' or self.Cost.get() == '' or self.Units.get() == '' or self.Expiry.get() == '':
+            self.msg = "All fields are required"
+            self.message_.config(text=self.msg, fg="red")
+            return
+
+        # Append product details to the list
+        product_details = {
+            "id": self.Id.get(),
+            "cost": self.Cost.get(),
+            "units": self.Units.get(),
+            "expiry": self.Expiry.get()
+        }
+        self.products.append(product_details)
+        self.msg = f"Product {self.Id.get()} added!"
+        self.message_.config(text=self.msg, fg="green")
+        self.clear_fields()
+
+    # Generate single QR code for all products
+    def generate_qr(self):
+        self.msg = ""  # Clear any previous messages
+        self.message_.config(text=self.msg)
+
+        if not self.products:
+            self.msg = "No products added"
+            self.message_.config(text=self.msg, fg="red")
+            return
+
+        con = None  # Initialize con here to avoid UnboundLocalError
+        try:
+            # Establish MySQL connection
+            con = mysql.connector.connect(host="localhost", user="root", password="", database="smart_cart")
+
+            # Check if the folder for saving QR code exists
+            folder_path = "C:/Users/SURYA/Desktop/Smart Cart/smartcart-main/qr folder/Qr_project/"
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+
+            # Collect all product data into a single string
+            qr_data = "Product Details:\n"
+            for product in self.products:
+                qr_data += f"ID: {product['id']}, Cost: {product['cost']}, Units: {product['units']}, Expiry: {product['expiry']}\n"
+
+                # Insert each product into the database
+                mycursor = con.cursor()  # Move cursor creation inside the try block
+                mycursor.execute('INSERT INTO item (ProductID, Cost, Units, Expiry) VALUES (%s, %s, %s, %s)',
+                                 (product['id'], product['cost'], product['units'], product['expiry']))
+
+            qr = qrcode.make(qr_data)  # Generate the QR code
+            qr_image = qr.convert('RGB')  # Convert to an RGB image that Tkinter can use
+            self.img = ImageTk.PhotoImage(qr_image)  # Convert to ImageTk format
+            self.qr_img.config(image=self.img)  # Display in the Tkinter label
+
+            # Save the QR code image
+            qr.save(f"{folder_path}QR_all_products.png")
+            con.commit()
+
+            self.msg = "QR Code for all products generated and data saved successfully!"
+            self.message_.config(text=self.msg, fg="green")
+
+        except mysql.connector.Error as err:
+            print(f"Error: {err}")
+            self.message_.config(text=f"Error: {err}", fg="red")
+
+        except Exception as e:  # Catch any other exceptions
+            print(f"Unexpected error: {e}")
+            self.message_.config(text=f"Unexpected error: {e}", fg="red")
+
+        finally:
+            if con:
+                con.close()  # Ensure connection is closed if it was established
+
+    def clear_fields(self):
+        self.Id.set('')
+        self.Cost.set('')
+        self.Units.set('')
+        self.Expiry.set('')
+
+    def clear(self):
+        self.products = []  # Clear the products list
+        self.qr_img.config(image='', text="Not Available")
+        self.message_.config(text="All products cleared", fg="green")
+
+
+if __name__ == "__main__":
+    root = Tk()
+    obj = Generator(root)
+    root.mainloop()
