@@ -1,0 +1,509 @@
+from doctest import master
+from tkinter import *
+from tkinter import ttk, messagebox  # For themed widgets, if used
+import cv2
+import pyzbar.pyzbar as pyzbar
+from PIL import Image, ImageTk
+import mysql.connector
+import pygame
+from PIL._tkinter_finder import tk
+from fpdf import FPDF
+import time
+import tkinter as tk  # Ensure proper importing
+from tkinter import END  # Import END from tkinter
+import os
+import base64
+import logging
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from mail import SCOPES, load_credentials, send_message, send_email
+
+# Initialize Pygame mixer
+pygame.mixer.init()
+
+class SmartCart:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Billing Software")
+        self.root.geometry("{0}x{1}+0+0".format(root.winfo_screenwidth(), root.winfo_screenheight()))
+
+        # Initialize label for show_frames method
+        self.label = tk.Label(self.root)
+        self.label.place(x=0, y=0)  # Set the position as required
+
+        # Initialize variables for customer details
+        self.customer_name = StringVar()  # Initialize the customer name variable
+        self.contact_number = StringVar()  # Initialize the contact number variable
+        self.customer_email = StringVar()  # Initialize customer_email here
+
+        self.master = master
+
+        self.customer_name = Entry(master)  # Assuming self.root is your main window
+        self.customer_name.pack()  # Use .grid() or .pack() to place it in your layout
+
+        self.contact_number = Entry(master)
+        self.contact_number.pack()
+
+        self.email_entry = tk.Entry(master)  # Entry widget for email
+        self.email_entry.pack()  # Pack the widget
+
+        # Setup UI elements
+        self.setup_ui()
+
+        # Other necessary initializations
+        self.dict = {'flag': 0}  # To decide the add or remove operation
+        self.item_list = []  # Contains the product list till end
+        self.new_list = []
+
+        # Camera setup
+        self.cap = cv2.VideoCapture(0)  # Enables the camera usage
+        self.show_frames()
+
+    def setup_ui(self):
+        name = Label(self.root, text="Billing System", bd=12, font=("Times New Roman", 40), pady=2, relief=GROOVE, bg='#053246', justify=CENTER, fg="white")
+        name.place(x=0, y=0, width="1530", height="100")
+
+        F1 = LabelFrame(self.root, text="Customer Details", bd=12, font=("Times New Roman", 15), pady=2, relief=GROOVE, bg='#053246', fg="white")
+        F1.place(x=0, y=105, relwidth=1, height="80")
+
+        Label(F1, text="Customer Name", font=("times new roman", 15, "bold"), fg="gold", bg='#053246').grid(row=0, column=0, padx=20, pady=5)
+        self.customer_name = Entry(F1, font=("times new roman", 15, "bold"), fg="Black", textvariable=self.customer_name)
+        self.customer_name.grid(row=0, column=1, padx=20, pady=5)
+
+        Label(F1, text="Contact Number", font=("times new roman", 15, "bold"), fg="gold", bg='#053246').grid(row=0, column=2, padx=20, pady=5)
+        self.contact_number = Entry(F1, font=("times new roman", 15, "bold"), fg="Black", textvariable=self.contact_number)
+        self.contact_number.grid(row=0, column=3, padx=20, pady=5)
+
+        Label(F1, text="Customer Mail-ID", font=("times new roman", 15, "bold"), fg="gold", bg='#053246').grid(row=0,column=4,padx=20,pady=5)
+        self.email_entry = Entry(F1, font=("times new roman", 15, "bold"), fg="Black", textvariable=self.customer_email)
+        self.email_entry.grid(row=0, column=5, padx=20, pady=5)
+
+        F4 = Frame(self.root, bg='#053246', pady=2, relief=GROOVE)
+        F4.place(x=1290, y=190, width=300, height=550)
+        Button(F4, text="Add", command=self.add_item, font=("Times New Roman", 20), pady=2, relief=GROOVE, bg='yellow', fg="black").place(x=35, y=5, width=190, height=80)
+        Button(F4, text="Remove", command=self.remove_item, font=("Times New Roman", 20), pady=2, relief=GROOVE, bg='yellow', fg="black").place(x=35, y=95, width=190, height=80)
+        Button(F4, text="End Shopping", command=self.end_shopping, font=("Times New Roman", 20), pady=2, relief=GROOVE, bg='Green', fg="black").place(x=35, y=185, width=190, height=80)
+        Button(F4, text="Cancel", font=("Times New Roman", 20), pady=2, relief=GROOVE, bg='Red', fg="black").place(x=35, y=275, width=190, height=80)
+
+        F3 = LabelFrame(self.root, bd=12, font=("Times New Roman", 15), pady=2, relief=GROOVE, bg='#053246', fg="white")
+        F3.place(x=610, y=190, width=680, height=550)
+        self.msg = Label(self.root, text="Scan the product to add", font=("Times New Roman", 40), fg='yellow', bg='#053246')
+        self.msg.place(x=0, y=740, width=1550, height=50)
+        self.label = Label(F3)
+        self.label.place(x=10, y=10)
+
+        F3 = LabelFrame(self.root, text="BILL", pady=2, relief=GROOVE, bd=12, font=("times new roman", 15), fg="gold", bg='#053246')
+        F3.place(x=0, y=190, width=700, height=550)
+        self.bill = Text(F3, font=("times new roman", 15, "bold"))
+        self.bill.place(x=0, y=0, width=660, height=700)
+        text_scroll = ttk.Scrollbar(self.bill, orient="vertical", command=self.bill.yview)
+        text_scroll.pack(side=RIGHT, fill=Y)
+        self.bill.config(yscrollcommand=text_scroll.set)
+
+    def on_send_button_click(self, email_entry):
+        receiver_email = email_entry.get()
+        if receiver_email:
+            send_email(receiver_email)
+        else:
+            messagebox.showwarning("Input Error", "Please enter a valid email address!")
+
+    def play_sound(self, file_path):
+        pygame.mixer.music.load(file_path)
+        pygame.mixer.music.play()
+
+    def add_item(self):
+        self.dict["flag"] = 0
+        self.msg.config(text="Scan the product to add to cart", bg="#053246", fg="yellow")
+
+    def remove_item(self):
+        self.dict["flag"] = 1
+        self.msg.config(text="Scan the product to remove from cart", bg="#053246", fg="yellow")
+
+
+    def generate_bill_number(self):
+        # Generate bill number using the current timestamp
+        bill_no = int(time.time())  # This gives a unique integer based on the current time
+        return bill_no
+
+    def end_shopping(self):
+        # Save the bill, generate the PDF, and send the email as before
+        self.bill_no = self.generate_bill_number()  # Ensure bill_no is initialized
+        self.customer_email = self.get_customer_email()  # Get the customer's email
+
+        # Debugging print to check if email was retrieved
+        print(f"Customer Email: {self.customer_email}")  # Debugging print
+
+        if not self.customer_email:  # Check if the email is empty
+            print("No customer email provided.")
+            return  # Exit if no email is provided
+
+        self.save_bill_to_file()
+        self.generate_pdf()
+        self.send_email(self.customer_email)  # Pass the email to the send_email method
+
+    def calculate_total(self, bill_details):
+        total = 0.0
+        lines = bill_details.splitlines()  # Split the bill details into individual lines
+        for line in lines:
+            if line.strip():  # Ignore empty lines
+                parts = line.split()
+
+                # Debug: Print each line and its parts for inspection
+                print(f"Processing line: {line}")
+                print(f"Parts: {parts}")
+
+                # Skip lines that are headers or total cost
+                if 'ProductID:' not in parts:  # Skip if not a product line
+                    print(f"Skipping invalid line: {line}")
+                    continue
+
+                # Check if the line has the expected structure
+                if len(parts) >= 5 and parts[0] == 'ProductID:':
+                    try:
+                        # Extract the relevant parts for quantity and price
+                        product_id = parts[1]  # ProductID
+                        price = float(parts[3])  # Cost
+                        quantity = int(parts[5])  # Units
+                        total += quantity * price  # Calculate total cost for this item
+                        print(f"Adding to total: {quantity} * {price} = {quantity * price}")  # Debug info
+                    except (ValueError, IndexError) as e:
+                        print(f"Error processing line: {line} - {e}")  # Handle any parsing errors
+                        continue
+
+        print(f"Total calculated: {total}")  # Debug info
+        return total
+
+    def save_bill_to_file(self):
+        # Get the bill details from the Text widget
+        bill_details = self.bill.get(1.0, tk.END).strip()  # Ensure you are using the correct Text widget reference
+
+        try:
+            with open(r"C:\Users\SURYA\Desktop\Smart Cart\bill.txt", "w") as f:
+                self.customer_email = self.get_customer_email() # Retrieve email from the Entry
+                f.write(f"Bill No.: {self.bill_no}\n")
+                f.write(f"Customer Name: {self.customer_name.get()}\n")
+                f.write(f"Phone No.: {self.contact_number.get()}\n")
+                f.write(f"Customer Mail-ID: {self.customer_email}\n")
+                f.write("==================================================\n")
+                f.write("Product\t\tQty\t\tPrice\n")
+                f.write("==================================================\n")
+                f.write(bill_details + "\n")  # Ensure that bill details are properly formatted
+                f.write("==================================================\n")
+                f.write(f"Total\t\t\t{self.calculate_total(bill_details)}\n")
+        except IOError as e:
+            print(f"Error saving bill to file: {e}")
+
+    def generate_pdf(self):
+        try:
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+
+            bill_no = self.generate_bill_number()  # Generate bill number
+            # Get values from Entry widgets using get()
+            customer_name = self.customer_name.get() if hasattr(self, 'customer_name') else 'N/A'  # Get customer name
+            contact_number = self.contact_number.get() if hasattr(self, 'contact_number') else 'N/A'  # Get contact number
+            customer_email = self.customer_email  # Get customer email
+
+            if not self.customer_name or not self.contact_number or not self.customer_email:
+                print("Error: One or more fields are empty!")
+                return
+
+            # Title
+            pdf.cell(0, 10, 'Smart Cart for Easy Shopping', ln=True, align='C')
+            pdf.cell(0, 10, '==================================================', ln=True, align='C')
+
+            # Bill Information
+            pdf.cell(0, 10, f"Bill No. : {bill_no}", ln=True)
+            pdf.cell(0, 10, f"Customer Name : {customer_name}", ln=True)
+            pdf.cell(0, 10, f"Phone No. : {contact_number}", ln=True)
+            pdf.cell(0, 10, f"Customer Mail-ID: {customer_email}", ln=True)
+            pdf.cell(0, 10, '==================================================', ln=True)
+
+            # Header for Product details
+            pdf.cell(40, 10, 'Product', border=1)
+            pdf.cell(40, 10, 'Qty', border=1)
+            pdf.cell(40, 10, 'Price', border=1)
+            pdf.cell(0, 10, '', ln=True)  # New line after header
+
+            pdf.cell(0, 10, '==================================================', ln=True)
+
+            # Prepare to write the bill content to the PDF
+            bill_lines = self.bill.get(1.0, END).strip().split('\n')  # Get all lines from the bill
+            total_price = 0.0  # Initialize total price as a float
+
+            # Add each valid line to the PDF
+            for line in bill_lines:
+                parts = line.split()  # Split each line into parts
+
+                # Debug: Print the line and parts
+                print(f"Processing line: {line}")
+                print(f"Parts: {parts}")
+
+                # Skip lines that do not have product information
+                if 'ProductID:' not in line:
+                    print(f"Skipping invalid line: {line}")  # Log skipped lines
+                    continue
+
+                # Ensure the line has the expected number of parts
+                if len(parts) >= 5 and parts[0] == 'ProductID:':
+                    try:
+                        product_id = parts[1]  # Product ID
+                        qty = int(parts[5])  # Units
+                        price = float(parts[3])  # Cost
+
+                        # Calculate total price
+                        total_price += price * qty
+
+                        # Add product details to PDF
+                        pdf.cell(40, 10, product_id, border=1)
+                        pdf.cell(40, 10, str(qty), border=1)  # Ensure qty is string
+                        pdf.cell(40, 10, f"{price:.2f}", border=1)  # Format price to 2 decimal places
+                        pdf.cell(0, 10, '', ln=True)  # New line for the next entry
+
+                    except (ValueError, IndexError) as e:
+                        print(f"Error processing line: {line} - {e}")  # Handle parsing errors
+
+            pdf.cell(0, 10, '==================================================', ln=True)
+
+            # Total
+            pdf.cell(80, 10, 'Total', align='R')
+            pdf.cell(40, 10, f"{total_price:.2f}", ln=True)
+
+            # Output file path
+            output_path = os.path.join("C:/Users/SURYA/Desktop/Smart Cart/smartcart-main", "my.pdf")
+            pdf.output(output_path)
+            print("PDF generated successfully at:", output_path)  # Log success
+
+        except Exception as e:
+            print(f"Error generating PDF: {e}")  # Log any error that occurs
+
+
+    def update_bill(self):
+        self.bill.delete(1.0, END)  # Clear the current bill text
+        total_cost = 0
+
+        # Debug: Check the item list
+        print("Item List:", self.item_list)
+
+        # Check if item_list is empty
+        if not self.item_list:
+            self.bill.insert(END, "No items to display.\n")
+            return
+
+        for item in self.item_list:
+            print("Processing Item:", item)  # Debug: Print each item
+            try:
+                ProductID = item[0]  # Adjust according to your item structure
+                Cost = float(item[1])
+                Units = int(item[2])
+                Expiry = item[3]
+                Total = Cost * Units
+
+                # Format the bill correctly with alignment
+                self.bill.insert(END,
+                                 f"ProductID: {ProductID:<8}   Cost: {Cost:<6}  Units: {Units:<4}  Expiry: {Expiry}\n")
+                total_cost += Total
+            except IndexError:
+                print(f"Error processing item: {item}")
+
+        self.bill.insert(END, f"\nTotal Cost: {total_cost:.2f}\n")  # Ensure total cost is formatted properly
+
+
+
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    # Define SCOPES
+    SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+
+    def load_credentials(self):
+        """Load or refresh Google API credentials."""
+        creds = None
+        if os.path.exists('token.json'):
+            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file('C:/Users/SURYA/Downloads/credentials.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            with open('token.json', 'w') as token:
+                token.write(creds.to_json())
+        return creds
+
+    def create_message_with_attachment(self,sender, to, subject, message_text, file_path, filename):
+        """Create a message for an email with an attachment."""
+        message = MIMEMultipart()
+        message['to'] = to
+        message['from'] = sender
+        message['subject'] = subject
+
+        # Attach the body of the email
+        message.attach(MIMEText(message_text, 'plain'))
+
+        # Open the file to be sent
+        try:
+            with open(file_path, "rb") as attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(attachment.read())
+
+            # Encode the attachment in base64
+            encoders.encode_base64(part)
+
+            # Add header with filename
+            part.add_header(
+                'Content-Disposition',
+                f'attachment; filename={filename}',
+            )
+
+            # Attach the file to the message
+            message.attach(part)
+        except FileNotFoundError:
+            print(f"The file {filename} was not found at {file_path}.")
+            return None  # Exit if file is not found
+
+        # Encode the message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+        return {'raw': raw_message}
+
+    def send_message(self,service, user_id, message):
+        """Send an email message."""
+        try:
+            message = service.users().messages().send(userId=user_id, body=message).execute()
+            logging.info(f'Message Id: {message["id"]}')
+            print("Email sent successfully!")
+        except Exception as e:
+            logging.error(f'An error occurred: {e}')
+            print(f"Error sending email: {e}")
+
+    def send_email(self, customer_email):
+        """Main function to send email with attachment."""
+        if not customer_email:
+            print("No recipient email provided.")
+            return  # Exit if no email is provided
+
+        try:
+            # Email Information
+            sender_email_address = "aniruddhasai720@gmail.com"
+            subject_of_email = "SMARTCART"
+            body_of_email = "Dear customer, thank you for shopping with us.........😊"
+
+            print(f"Sending email to {customer_email}")
+
+            # File details
+            filename = "my.pdf"
+            location_of_file = "C:/Users/SURYA/Desktop/Smart Cart/smartcart-main"
+            file_path = os.path.join(location_of_file, filename)
+
+            # Load credentials and connect to Gmail API
+            creds = load_credentials()
+            service = build('gmail', 'v1', credentials=creds)
+
+            # Create email message with attachment
+            email_message = self.create_message_with_attachment(
+                sender_email_address, customer_email, subject_of_email, body_of_email, file_path, filename
+            )
+
+            # Send the email
+            send_message(service, 'me', email_message)
+            print("Email sent successfully.")
+
+        except Exception as e:
+            print(f"An error occurred while sending email: {e}")
+
+    def get_customer_email(self):
+        """Retrieve the email from the entry widget."""
+        email = self.email_entry.get()  # Get the email from the entry widget
+        print(f"Retrieved email: {email}")  # Debugging print
+        return email
+
+    def show_frames(self):
+        ret, frame = self.cap.read()
+        if ret:
+            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            decodedObjects = pyzbar.decode(cv2image)
+            for obj in decodedObjects:
+                raw_data = obj.data.decode("utf-8")  # Get raw QR code data
+                print("Raw QR Code Data:", raw_data)  # Print the raw data for debugging
+
+                d = raw_data.splitlines(', ')  # Split into lines
+                print("Decoded QR Code Data List:", d)  # Debug print of the list
+
+                # Check if we have the expected number of items (should be at least 5 items now)
+                if len(d) < 2:  # Expecting at least 6 items: 1 header + 5 details
+                    self.msg.config(text="Invalid QR Code. Try again.", bg="red", fg="white")
+                    print("Error: Insufficient data in QR code.")  # Print error for insufficient data
+                    continue
+
+                # Iterate through the lines starting from the second line
+                for product_data in d:
+                    try:
+                        if "ID:" not in product_data:  # Skip lines that aren't product details
+                            continue
+
+                        # Now split each product_data by commas
+                        product_details = product_data.split(', ')
+                        ProductID = product_details[0].split(': ')[1].strip()
+                        Cost = float(product_details[1].split(': ')[1].strip())
+                        Units = int(product_details[2].split(': ')[1].strip())
+                        Expiry = product_details[3].split(': ')[1].strip()
+
+                        # Add the parsed product to your item_list
+                        item = [ProductID, Cost, Units, Expiry]
+                    except (IndexError, ValueError) as e:
+                        print(f"Error parsing QR code data: {e}")
+                        continue  # Skip this QR code if there's an error
+
+                    if self.dict["flag"] == 0:  # Adding item
+                        if item not in self.item_list:
+                            self.item_list.append(item)
+                            self.new_list.append(item)
+                            # Play sound for item added to the list
+                            self.play_sound(
+                                'C:/Users/SURYA/Desktop/Smart Cart/smartcart-main/Item_Present_in_the_cart.mp3')
+                        else:
+                            # Play sound if item is already present in the list
+                            self.play_sound(
+                                'C:/Users/SURYA/Desktop/Smart Cart/smartcart-main/Item_added_to_the_cart.mp3')
+
+                        self.update_bill()  # Update the bill to reflect the added item
+                        self.msg.config(text="Scan the product to add to cart", bg="#053246", fg="yellow")
+
+                    elif self.dict["flag"] == 1:  # Removing item
+                        item = [ProductID, Cost, Units, Expiry]  # Create item list from extracted data
+                        if item in self.item_list:
+                            self.item_list.remove(item)
+                            self.new_list.remove(item)
+
+                            # Play sound for item removed from the list
+                            self.play_sound(
+                                'C:/Users/SURYA/Desktop/Smart Cart/smartcart-main/Item_removed_from_the_cart.mp3')
+
+                        else:
+                            # Play sound if item is not found in the list
+                            self.play_sound(
+                                'C:/Users/SURYA/Desktop/Smart Cart/smartcart-main/Item_removed_from_the_cart.mp3')
+
+                        self.update_bill()  # Update the bill to reflect the removed item
+                        self.msg.config(text="Scan the product to remove from cart", bg="#053246", fg="yellow")
+
+
+            # Display the image
+            cv2image = Image.fromarray(cv2image)
+            imgtk = ImageTk.PhotoImage(image=cv2image)
+            self.label.imgtk = imgtk
+            self.label.configure(image=imgtk)
+
+        self.label.after(20, self.show_frames)  # Call this function again after 20 ms
+
+if __name__ == "__main__":
+    root = Tk()  # Create the root window
+    app = SmartCart(root)  # Pass the root window to SmartCart
+    root.mainloop()  # Start the Tkinter event loop
